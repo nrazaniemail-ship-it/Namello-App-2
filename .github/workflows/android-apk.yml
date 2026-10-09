@@ -22,12 +22,36 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Normalise layout (fixes flat phone uploads)
+        run: |
+          set -eu
+          mkdir -p backend src/modules tests scripts assets index_scripts public/index_scripts
+          mv_if() { # $1 = file at repo root, $2 = destination folder
+            if [ -f "$1" ]; then
+              if [ -f "$2/$1" ]; then rm -f "$1"; else mv "$1" "$2/"; fi
+            fi
+          }
+          for n in crypto csv-import portfolio prop-firm psychology replay statistics sync; do mv_if "$n.ts" src/modules; done
+          for f in *.test.mjs; do mv_if "$f" tests; done
+          for f in set-android-version.mjs verify-namello-version.mjs; do mv_if "$f" scripts; done
+          for n in 0 1 2 3 4 12 16; do
+            if [ -f "$n.js" ]; then [ -e "public/index_scripts/$n.js" ] || cp "$n.js" public/index_scripts/; mv_if "$n.js" index_scripts; fi
+          done
+          mv_if icon-only.png assets
+          for f in server.mjs Caddyfile Dockerfile DEPLOYMENT.md docker-compose.yml docker-compose.local.yml; do mv_if "$f" backend; done
+          for f in icon-*.png icon-*.jpg manifest*.json sw.js widget.html; do
+            if [ -f "$f" ]; then [ -e "public/$f" ] || cp "$f" public/; fi
+          done
+          echo "Layout normalised."
+
       - name: Verify repository layout
         run: |
           set -eu
           for f in package.json index.html capacitor.config.ts version.json assets/icon-only.png; do
             test -f "$f" || { echo "ERROR: $f not found in repository root. Upload the CONTENTS of the zip to the repo root."; exit 1; }
           done
+          NAME=$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).name")
+          test "$NAME" = "namello-pwa" || { echo "ERROR: package.json is '$NAME' (probably backend/package.json). Upload the root package.json of the app (name: namello-pwa)."; exit 1; }
           echo "Repository layout OK."
 
       - name: Set up Node.js
